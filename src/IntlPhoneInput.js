@@ -13,26 +13,35 @@ import {
 import PropTypes from 'prop-types';
 import data from './Countries';
 
+const defaultMask = '999 999 9999';
+
 export default class IntlPhoneInput extends React.Component {
   constructor(props) {
     super(props);
-    const defaultCountry = data.filter((obj) => obj.code === props.defaultCountry)[0] || data.filter((obj) => obj.code === 'TR')[0];
+    const selectedCountry = data.filter((obj) => obj.dialCode === props.dialCode)[0];
+    const defaultValue = props.defaultValue;
+    const defaultCountry = data.filter((obj) => obj.dialCode === '+965')[0];
+    console.log(selectedCountry);
+    console.log(defaultCountry);
     this.state = {
       defaultCountry,
-      flag: defaultCountry.flag,
+      flag:selectedCountry ? selectedCountry.flag :defaultCountry.flag,
       modalVisible: false,
-      dialCode: defaultCountry.dialCode,
-      phoneNumber: '',
-      mask: defaultCountry.mask,
+      dialCode: selectedCountry ? selectedCountry.dialCode :defaultCountry.dialCode,
+      phoneNumber: defaultValue,
+      mask: selectedCountry ? selectedCountry.mask:defaultMask,
       countryData: data,
-      selectedCountry:defaultCountry,
-      placeholderTextColor: 'grey'
+      selectedCountry:selectedCountry
     };
   }
 
   onChangePropText=(unmaskedPhoneNumber, phoneNumber) => {
     const { dialCode, mask,selectedCountry } = this.state;
-    const countOfNumber = mask.match(/9/g).length;
+    const countOfNumber = mask && mask.match(/9/g).length;
+    console.log(`unmaskedPhoneNumber ${unmaskedPhoneNumber}`);
+    console.log(`phoneNumber ${phoneNumber}`);
+    console.log(`mask ${mask}`);
+    console.log(`countOfNumber ${countOfNumber}`);
     if (this.props.onChangeText) {
       const isVerified = countOfNumber === unmaskedPhoneNumber?.length && phoneNumber?.length > 0;
       this.props.onChangeText({
@@ -42,28 +51,36 @@ export default class IntlPhoneInput extends React.Component {
   }
 
   onChangeText = (value) => {
+    console.log(`value ${value}`);
     let unmaskedPhoneNumber = (value.match(/\d+/g) || []).join('');
-
+    console.log(`unmaskedPhoneNumber ${unmaskedPhoneNumber}`);
     if (unmaskedPhoneNumber.length === 0) {
       this.setState({ phoneNumber: '' });
       this.onChangePropText('', '');
       return;
     }
 
-
-    let phoneNumber = this.state.mask.replace(/9/g, '_');
+    console.log(`this.state.mask ${this.state.mask}`);
+    let phoneNumber =   this.state.mask && this.state.mask.replace(/9/g, '_');
+    console.log(`phoneNumber ${phoneNumber}`);
     for (let index = 0; index < unmaskedPhoneNumber.length; index += 1) {
       phoneNumber = phoneNumber.replace('_', unmaskedPhoneNumber[index]);
     }
+ 
+
     let numberPointer = 0;
+    console.log(phoneNumber);
+    if(phoneNumber){
     for (let index = phoneNumber.length; index > 0; index -= 1) {
       if (phoneNumber[index] !== ' ' && !isNaN(phoneNumber[index])) {
         numberPointer = index;
         break;
       }
     }
+
     phoneNumber = phoneNumber.slice(0, numberPointer + 1);
     unmaskedPhoneNumber = (phoneNumber.match(/\d+/g) || []).join('');
+  }
 
     this.onChangePropText(unmaskedPhoneNumber, phoneNumber);
     this.setState({ phoneNumber });
@@ -72,9 +89,10 @@ export default class IntlPhoneInput extends React.Component {
 
   showModal = () => (this.props.disableCountryChange ? null : this.setState({ modalVisible: true }));
 
-  hideModal = () => this.setState({ modalVisible: false });
+  hideModal = () => this.setState({ modalVisible: false, countryData: data });
 
   onCountryChange = async (code) => {
+    const {updateDialCode} = this.props;
     const countryData = await data;
     try {
       const country = await countryData.filter((obj) => obj.code === code)[0];
@@ -86,15 +104,17 @@ export default class IntlPhoneInput extends React.Component {
         selectedCountry:country
       });
       this.hideModal();
+      updateDialCode(country.dialCode);
     } catch (err) {
-      const defaultCountry = this.state.defaultCountry;
+      const selectedCountry = this.state.selectedCountry;
       this.setState({
-        dialCode: defaultCountry.dialCode,
-        flag: defaultCountry.flag,
-        mask: defaultCountry.mask,
+        dialCode: selectedCountry.dialCode,
+        flag: selectedCountry.flag,
+        mask: selectedCountry.mask,
         phoneNumber: '',
-        selectedCountry:defaultCountry
+        selectedCountry:selectedCountry
       });
+      updateDialCode(selectedCountry.dialCode);
     }
   }
 
@@ -122,18 +142,18 @@ export default class IntlPhoneInput extends React.Component {
       filterText,
       searchIconStyle,
       closeButtonStyle,
-      lang,
-      placeholderTextColor
+      lang
     } = this.props;
+    console.log(this.state.countryData);
     return (
       <Modal animationType="slide" transparent={false} visible={this.state.modalVisible}>
         <SafeAreaView style={{ flex: 1 }}>
         <View style={[styles.modalContainer, modalContainer]}>
           <View style={styles.filterInputStyleContainer}>
-            <TextInput autoFocus onChangeText={this.filterCountries} placeholder={filterText || 'Filter'} style={[styles.filterInputStyle, filterInputStyle]} placeholderTextColor={placeholderTextColor }/>
-            <Text style={[styles.searchIconStyle, searchIconStyle]}>🔍</Text>
+            <TextInput autoFocus onChangeText={this.filterCountries} placeholder={filterText || 'Filter'} style={[styles.filterInputStyle, filterInputStyle]} />
           </View>
-          <FlatList
+          {(this.state.countryData.length > 0)?
+          (<FlatList
             style={{ flex: 1 }}
             data={this.state.countryData}
             keyExtractor={(item, index) => index.toString()}
@@ -150,7 +170,12 @@ export default class IntlPhoneInput extends React.Component {
             </TouchableWithoutFeedback>
           )
         }
-          />
+          />)
+          :
+          (
+            <Text style={styles.modalCountryItemCountryNameStyle}>No matching results found!</Text>
+          )
+      }
         </View>
         <TouchableOpacity onPress={() => this.hideModal()} style={[styles.closeButtonStyle, closeButtonStyle]}>
           <Text style={styles.closeTextStyle}>{closeText || 'CLOSE'}</Text>
@@ -171,14 +196,13 @@ renderAction=()=>{
 }
 
   render() {
-    const { flag } = this.state;
+    const { flag, defaultCountry } = this.state;
     const {
       containerStyle,
       flagStyle,
       phoneInputStyle,
       dialCodeTextStyle,
-      inputProps,
-      placeholderTextColor
+      inputProps
     } = this.props;
     return (
       <View style={{ ...styles.container, ...containerStyle }}>
@@ -192,13 +216,12 @@ renderAction=()=>{
         <TextInput
           {...inputProps}
           style={[styles.phoneInputStyle, phoneInputStyle]}
-          placeholder={this.props.placeholder || this.state.mask.replace(/9/g, '_')}
+          placeholder={this.props.placeholder || (this.state.mask ? this.state.mask.replace(/9/g, '_'):defaultMask.replace(/9/g, '_'))}
           autoCorrect={false}
           keyboardType="number-pad"
           secureTextEntry={false}
           value={this.state.phoneNumber}
           onChangeText={this.onChangeText}
-          placeholderTextColor={placeholderTextColor}
         />
         {this.renderAction()}
 
@@ -227,7 +250,7 @@ IntlPhoneInput.propTypes = {
   searchIconStyle: PropTypes.object,
   disableCountryChange: PropTypes.bool,
   inputRef: PropTypes.object,
-  placeholderTextColor: PropTypes.string
+  defaultValue: PropTypes.string,
 };
 
 const styles = StyleSheet.create({
@@ -235,7 +258,10 @@ const styles = StyleSheet.create({
     padding: 5,
     fontSize: 20,
     color: 'black',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    borderColor: 'black',
+    borderWidth:1,
+    borderRadius:3,
   },
   modalCountryItemCountryDialCodeStyle: {
     fontSize: 15
@@ -263,6 +289,9 @@ const styles = StyleSheet.create({
     fontSize: 35,
   },
   dialCodeTextStyle: {
+    marginLeft:4,
+    fontSize: 14,
+    color: '#231F20',
   },
   countryModalStyle: {
     flex: 1,
@@ -275,7 +304,7 @@ const styles = StyleSheet.create({
   },
   openDialogView: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   filterInputStyle: {
     flex: 1,
@@ -292,18 +321,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 3,
+    borderWidth:1,
+    padding:1,
+    borderColor: 'black',
+    marginBottom:4,
   },
   phoneInputStyle: {
     marginLeft: 5,
-    flex: 1
+    flex: 1,
+    fontSize: 16,
+    color: '#231F20',
   },
   container: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
+    //paddingHorizontal: 12,
     padding: 5,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: 'white',
   },
   searchIconStyle: {
     color: 'black',
